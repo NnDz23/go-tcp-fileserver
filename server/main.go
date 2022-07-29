@@ -68,8 +68,7 @@ func (server *Server) Parse(request string) {
 func (server *Server) Broadcast(channel string, fileContestStr string) {
 	for connIdx := range server.channels[channel] {
 		conn := server.channels[channel][connIdx]
-		writer := bufio.NewWriter(conn)
-		_, err := writer.Write([]byte(fmt.Sprintf(SUBSCRIBE_RESPONSE, fileContestStr)))
+		_, err := conn.Write([]byte(fmt.Sprintf(SUBSCRIBE_RESPONSE, fileContestStr)))
 		if err != nil {
 			log.Println(err)
 		}

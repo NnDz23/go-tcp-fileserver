@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -25,6 +26,8 @@ const (
 	REQUEST         = "%s %s %s\n"
 	RESPONSE_PREFIX = "file "
 	RESPONSE_REGEX  = RESPONSE_PREFIX + "{.+}\n"
+
+	FILES_DIR = "./files/"
 )
 
 var wg sync.WaitGroup
@@ -74,24 +77,24 @@ func HandleSubscribe(subscribeCmd *flag.FlagSet, channel *string) {
 // Reads files from the connection.
 func Read(conn net.Conn, c string) {
 	reader := bufio.NewReader(conn)
+	r, _ := regexp.Compile(RESPONSE_REGEX)
 	for {
-		response, err := reader.ReadString('\n')
-		log.Println(response)
+		str, err := reader.ReadString('\n')
 		if err != nil {
-			log.Println(err)
 			wg.Done()
 			return
 		}
-		//fmt.Print(str)
-		match, _ := regexp.MatchString(RESPONSE_REGEX, response)
+		match := r.MatchString(str)
 		if match {
-			fileContentStr := strings.ReplaceAll(response, RESPONSE_PREFIX, "")
+			fileContentStr := strings.ReplaceAll(str, RESPONSE_PREFIX, "")
+			fileContentStr = strings.ReplaceAll(fileContentStr, "\n", "")
 			var file fileContent
-			err = json.Unmarshal([]byte(fileContentStr), file)
+			err = json.Unmarshal([]byte(fileContentStr), &file)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
+			log.Println("received file", file.Name+file.Extension, "from", c)
 			err = SaveFile(file, c)
 			if err != nil {
 				log.Println(err)
@@ -99,7 +102,6 @@ func Read(conn net.Conn, c string) {
 			}
 		}
 	}
-
 }
 
 func HandleSend(sendCmd *flag.FlagSet, file *string, channel *string) {
@@ -193,15 +195,23 @@ func GetFile(file *string) (*fileContent, error) {
 func SaveFile(f fileContent, c string) error {
 	dec, err := base64.StdEncoding.DecodeString(f.Content)
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
-
-	file, err := os.Create("./files/" + c + "/" + f.Name + f.Extension)
+	//create channel directory if it does not exists
+	path := FILES_DIR + c + "/"
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		err := os.Mkdir(path, os.ModePerm)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+	//create file
+	file, err := os.Create(path + f.Name + f.Extension)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-
+	//write file
 	if _, err := file.Write(dec); err != nil {
 		return err
 	}

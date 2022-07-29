@@ -1,2 +1,4 @@
 *.exe
 *.mod
+client/files/*
+server/files/*
