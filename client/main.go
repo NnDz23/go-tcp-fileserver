@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/manifoldco/promptui"
 )
 
 const (
@@ -31,6 +33,7 @@ const (
 )
 
 var wg sync.WaitGroup
+var allowOverwrite bool
 
 type fileContent struct {
 	Name      string `json:"name"`
@@ -78,6 +81,8 @@ func HandleSubscribe(subscribeCmd *flag.FlagSet, channel *string) {
 func Read(conn net.Conn, c string) {
 	reader := bufio.NewReader(conn)
 	r, _ := regexp.Compile(RESPONSE_REGEX)
+	log.Println("Allow incoming files to overwrite existing ones?")
+	allowOverwrite = cmdYesNo()
 	for {
 		str, err := reader.ReadString('\n')
 		if err != nil {
@@ -94,7 +99,6 @@ func Read(conn net.Conn, c string) {
 				log.Println(err)
 				continue
 			}
-			log.Println("received file", file.Name+file.Extension, "from", c)
 			err = SaveFile(file, c)
 			if err != nil {
 				log.Println(err)
@@ -205,20 +209,49 @@ func SaveFile(f fileContent, c string) error {
 			log.Println(err)
 		}
 	}
-	//create file
-	file, err := os.Create(path + f.Name + f.Extension)
-	if err != nil {
-		return err
+
+	filePath := path + f.Name + f.Extension
+	var writeFile bool
+	if _, err := os.Stat(filePath); err == nil {
+		if allowOverwrite {
+			log.Println("overwriting", filePath)
+		}
+		writeFile = allowOverwrite
+	} else {
+		writeFile = true
 	}
-	defer file.Close()
-	//write file
-	if _, err := file.Write(dec); err != nil {
-		return err
+
+	if writeFile {
+		//create file
+		file, err := os.Create(path + f.Name + f.Extension)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		//write file
+		if _, err := file.Write(dec); err != nil {
+			return err
+		}
+		if err := file.Sync(); err != nil {
+			return err
+		}
+	} else {
+		log.Println(filePath, "already exists, overwriting not allowed")
 	}
-	if err := file.Sync(); err != nil {
-		return err
-	}
+
 	return nil
+}
+
+func cmdYesNo() bool {
+	prompt := promptui.Select{
+		Label: "Select [Yes/No]",
+		Items: []string{"Yes", "No"},
+	}
+	_, result, err := prompt.Run()
+	if err != nil {
+		log.Fatalf("Prompt failed %v\n", err)
+	}
+	return result == "Yes"
 }
 
 func main() {
