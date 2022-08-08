@@ -99,6 +99,7 @@ func Read(conn net.Conn, c string) {
 				log.Println(err)
 				continue
 			}
+			log.Println("received file", file.Name, "from", c)
 			err = SaveFile(file, c)
 			if err != nil {
 				log.Println(err)
@@ -113,7 +114,7 @@ func HandleSend(sendCmd *flag.FlagSet, file *string, channel *string) {
 	sendCmd.Parse(os.Args[2:])
 	//Channel validation
 	if *channel == "" {
-		log.Println("expected a channel to receive files")
+		log.Println("expected a channel to send files to")
 		return
 	}
 	//File validations
