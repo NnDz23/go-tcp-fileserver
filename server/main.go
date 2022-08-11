@@ -187,6 +187,16 @@ func (server *Server) HandleConnection(conn net.Conn) {
 
 }
 
+func WriteJsonResponse(w http.ResponseWriter, status int, output []byte) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, err := w.Write(output)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (server *Server) ServeAPI() error {
 	log.Println("API listening on port", SERVER_API_PORT)
 
@@ -213,9 +223,7 @@ func (server *Server) ServeAPI() error {
 		if err != nil {
 			log.Println(err)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, err = w.Write(output)
+		err = WriteJsonResponse(w, http.StatusOK, output)
 		if err != nil {
 			log.Println(err)
 		}
@@ -227,12 +235,11 @@ func (server *Server) ServeAPI() error {
 		if err != nil {
 			log.Println(err)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, err = w.Write(output)
+		err = WriteJsonResponse(w, http.StatusOK, output)
 		if err != nil {
 			log.Println(err)
 		}
+
 	})
 
 	mux.Post("/channels/send", func(w http.ResponseWriter, r *http.Request) {
@@ -261,9 +268,7 @@ func (server *Server) ServeAPI() error {
 			if err != nil {
 				log.Println(err)
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_, err = w.Write(output)
+			err = WriteJsonResponse(w, http.StatusBadRequest, output)
 			if err != nil {
 				log.Println(err)
 			}
@@ -278,9 +283,7 @@ func (server *Server) ServeAPI() error {
 			if err != nil {
 				log.Println(err)
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_, err = w.Write(output)
+			err = WriteJsonResponse(w, http.StatusBadRequest, output)
 			if err != nil {
 				log.Println(err)
 			}
@@ -301,9 +304,7 @@ func (server *Server) ServeAPI() error {
 			if err != nil {
 				log.Println(err)
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_, err = w.Write(output)
+			err = WriteJsonResponse(w, http.StatusBadRequest, output)
 			if err != nil {
 				log.Println(err)
 			}
@@ -317,9 +318,7 @@ func (server *Server) ServeAPI() error {
 		if err != nil {
 			log.Println(err)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, err = w.Write(output)
+		err = WriteJsonResponse(w, http.StatusOK, output)
 		if err != nil {
 			log.Println(err)
 		}
