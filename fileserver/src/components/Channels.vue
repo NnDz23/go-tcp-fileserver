@@ -4,7 +4,10 @@
       <div class="col">
         <h1>Channels</h1>
 
-        <h4 v-if="items.length == 0">Please have a coffe while somebody creates a channel on the server &#9749;</h4>
+        <h4 v-if="items.length == 0">
+          Please have a coffee while someone creates a channel on the server
+          &#9749;
+        </h4>
 
         <channel
           v-for="item in items"
@@ -20,20 +23,32 @@
 </template>
 
 <script>
-import Channel from "./Channel.vue";
+import Channel from "@/components/Channel.vue";
+import {fetchWrapper} from "@/api/api.js";
+import { sortByName } from "@/utils/helpers";
+import { API_BASE_URL, CHANNELS_LIST_ENDPOINT } from "@/constants.js";
+
 export default {
   name: "Channels",
-  components:{Channel},
+  components: { Channel },
   props: [],
-  data (){
-    return {items:[]}
+  data() {
+    return { items: [] }
   },
-  mounted(){
-    
-    fetch('http://localhost:8081/channels/list')
-    .then((response) => response.json())
-    .then((data) => this.items = data.sort((a,b) => (a.name > b.name) ? 1 : ((b.name > a.name) ? -1 : 0)));
-  }
+  mounted() {
+    let endpoint = `${API_BASE_URL}${CHANNELS_LIST_ENDPOINT}`
+    fetchWrapper
+      .get(endpoint)
+      .then((data) => this.items = data.sort(sortByName))
+      .catch((error) => {
+        notie.alert({
+            type: "error",
+            stay: true,
+            text: "There was an error when trying to get available channels",
+          })
+          console.log("Error: ", error)
+      });
+  },
 };
 </script>
 

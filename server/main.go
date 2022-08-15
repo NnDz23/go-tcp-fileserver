@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,10 +20,14 @@ import (
 )
 
 const (
+	// SERVER_API_PORT port to serve API
 	SERVER_API_PORT = 8081
-	SERVER_PORT     = 8021
+	//SERVER_PORT port for fileserver protocol
+	SERVER_PORT = 8021
+	//SERVER_PROTOCOL protocol to use for fileserver
 	SERVER_PROTOCOL = "tcp"
 
+	//SUBSCRIBE_REQUEST_PREFIX subscribe command prefix
 	SUBSCRIBE_REQUEST_PREFIX = "subscribe "
 	SUBSCRIBE_REQUEST_REGEX  = SUBSCRIBE_REQUEST_PREFIX + ".+ {}"
 	SUBSCRIBE_RESPONSE       = "file %s\n"
@@ -30,6 +35,10 @@ const (
 	SEND_REQUEST_PREFIX = "send "
 	SEND_REQUEST_REGEX  = SEND_REQUEST_PREFIX + ".+ {.+}"
 	SEND_REQUEST        = "%s %s %s\n"
+)
+
+var (
+	errUnexistingChannel = errors.New("there was an attempt to send a file to an unexisting channel")
 )
 
 type fileContent struct {
@@ -125,35 +134,44 @@ func (server *Server) Listen() {
 	go func() {
 		for {
 			request := <-server.sendRequest
-			server.Parse(request)
+			parsedFileContent, channel, err := server.Parse(request)
+
+			if err != nil {
+				log.Printf("listen error: %s", err.Error())
+				continue
+			}
+
+			server.Broadcast(channel, parsedFileContent)
 		}
 	}()
 }
 
-func (server *Server) Parse(request string) {
+// Parse converts request ands returns parsedFileContent and channel
+func (server *Server) Parse(request string) (string, string, error) {
 	sendRequest := strings.ReplaceAll(request, SEND_REQUEST_PREFIX, "")
 	s := strings.Split(sendRequest, " ")
 	channel, fileContentStr := s[0], strings.Join(s[1:], " ")
 	if _, ok := server.channels[channel]; !ok {
-		log.Println("there was an attempt to send a file to an unexisting channel", channel)
-		return
+		return "", "", errUnexistingChannel
 	}
 
 	var file fileContent
 	err := json.Unmarshal([]byte(fileContentStr), &file)
 	if err != nil {
-		log.Println(err)
-		return
+		return "", "", err
 	}
-	server.Broadcast(channel, fileContentStr)
+
+	return fileContentStr, channel, nil
 }
 
-func (server *Server) Broadcast(channel string, fileContestStr string) {
+// Broadcast sends fileContentStr to all clients in channel
+func (server *Server) Broadcast(channel string, fileContentStr string) {
 	serverChannel := server.channels[channel]
 	serverChannel.Files = serverChannel.Files + 1
+
 	for client, conn := range server.channels[channel].ClientConnections {
 		log.Println("sending file to", client)
-		_, err := conn.Write([]byte(fmt.Sprintf(SUBSCRIBE_RESPONSE, fileContestStr)))
+		_, err := conn.Write([]byte(fmt.Sprintf(SUBSCRIBE_RESPONSE, fileContentStr)))
 		if err != nil {
 			log.Println(err)
 			//unsubscribe client when there is an error
@@ -171,12 +189,20 @@ func (server *Server) HandleConnection(conn net.Conn) {
 		log.Println(err)
 		return
 	}
-	match, _ := regexp.MatchString(SEND_REQUEST_REGEX, strings.TrimSuffix(req, "\n"))
+	match, err := regexp.MatchString(SEND_REQUEST_REGEX, strings.TrimSuffix(req, "\n"))
+	if err != nil {
+		log.Println("Error when checking for match")
+		match = false
+	}
 	//Send request
 	if match {
 		server.sendRequest <- strings.TrimSuffix(req, "\n")
 	}
-	match, _ = regexp.MatchString(SUBSCRIBE_REQUEST_REGEX, strings.TrimSuffix(req, "\n"))
+	match, err = regexp.MatchString(SUBSCRIBE_REQUEST_REGEX, strings.TrimSuffix(req, "\n"))
+	if err != nil {
+		log.Println("Error when checking for match")
+		match = false
+	}
 	//Subscribe request
 	if match {
 		subscribeRequest := strings.ReplaceAll(req, SUBSCRIBE_REQUEST_PREFIX, "")
@@ -194,10 +220,11 @@ func WriteJsonResponse(w http.ResponseWriter, status int, output []byte) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func (server *Server) ServeAPI() error {
+func (server *Server) ServeAPI() {
 	log.Println("API listening on port", SERVER_API_PORT)
 
 	mux := chi.NewRouter()
@@ -329,7 +356,10 @@ func (server *Server) ServeAPI() error {
 		Handler: mux,
 	}
 
-	return srv.ListenAndServe()
+	err := srv.ListenAndServe()
+	if err != nil {
+		log.Println("Error when starting API")
+	}
 }
 
 func main() {
@@ -339,6 +369,7 @@ func main() {
 		fmt.Println("expected at least one command")
 		os.Exit(1)
 	}
+
 	switch os.Args[1] {
 	case "start": // if its the start command
 		server := NewServer()

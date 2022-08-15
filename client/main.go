@@ -25,25 +25,35 @@ const (
 
 	//request format
 	//command channel data
-	REQUEST         = "%s %s %s\n"
-	RESPONSE_PREFIX = "file "
-	RESPONSE_REGEX  = RESPONSE_PREFIX + "{.+}\n"
 
+	// REQUEST format of the request
+	REQUEST = "%s %s %s\n"
+	// RESPONSE_PREFIX preffix for a received file
+	RESPONSE_PREFIX = "file "
+	// RESPONSE_REGEX regular expression to check if incoming file complies
+	RESPONSE_REGEX = RESPONSE_PREFIX + "{.+}\n"
+	// FILES_DIR directory used to store incoming files
 	FILES_DIR = "./files/"
 )
 
 var wg sync.WaitGroup
 var allowOverwrite bool
 
+// fileContent stuct that contains metadata (Name and Extension) associated to the Content
 type fileContent struct {
 	Name      string `json:"name"`
 	Extension string `json:"extension"`
 	Content   string `json:"content"`
 }
 
+// HandleSubscribe subscribes client to start receiving files from channel
 func HandleSubscribe(subscribeCmd *flag.FlagSet, channel *string) {
 	//Parse args
-	subscribeCmd.Parse(os.Args[2:])
+	err := subscribeCmd.Parse(os.Args[2:])
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	//Channel validation
 	if *channel == "" {
 		log.Println("expected a channel to receive files")
@@ -77,7 +87,7 @@ func HandleSubscribe(subscribeCmd *flag.FlagSet, channel *string) {
 	wg.Wait()
 }
 
-// Reads files from the connection.
+// Read reads for incomming files on the connection for channel c
 func Read(conn net.Conn, c string) {
 	reader := bufio.NewReader(conn)
 	r, _ := regexp.Compile(RESPONSE_REGEX)
@@ -90,28 +100,34 @@ func Read(conn net.Conn, c string) {
 			return
 		}
 		match := r.MatchString(str)
-		if match {
-			fileContentStr := strings.ReplaceAll(str, RESPONSE_PREFIX, "")
-			fileContentStr = strings.ReplaceAll(fileContentStr, "\n", "")
-			var file fileContent
-			err = json.Unmarshal([]byte(fileContentStr), &file)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-			log.Println("received file", file.Name, "from", c)
-			err = SaveFile(file, c)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
+		if !match {
+			log.Println("received message is not an appropiate file")
+			continue
+		}
+		fileContentStr := strings.ReplaceAll(str, RESPONSE_PREFIX, "")
+		fileContentStr = strings.ReplaceAll(fileContentStr, "\n", "")
+		var file fileContent
+		err = json.Unmarshal([]byte(fileContentStr), &file)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		log.Println("received file", file.Name, "from", c)
+		err = SaveFile(file, c)
+		if err != nil {
+			log.Println(err)
 		}
 	}
 }
 
+// HandleSend sends the file from the client to the channel
 func HandleSend(sendCmd *flag.FlagSet, file *string, channel *string) {
 	//Parse args
-	sendCmd.Parse(os.Args[2:])
+	err := sendCmd.Parse(os.Args[2:])
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	//Channel validation
 	if *channel == "" {
 		log.Println("expected a channel to send files to")
@@ -161,11 +177,13 @@ func HandleSend(sendCmd *flag.FlagSet, file *string, channel *string) {
 
 }
 
+// ValidateFile validates if specified file is an actual file
 func ValidateFile(file *string) error {
 	_, err := os.Stat(*file)
 	return err
 }
 
+// GetFile gets fileContent for the specified file
 func GetFile(file *string) (*fileContent, error) {
 	//get file extension
 	extension := filepath.Ext(*file)
@@ -197,6 +215,7 @@ func GetFile(file *string) (*fileContent, error) {
 	return fc, nil
 }
 
+// SaveFile saves received file to the files directory
 func SaveFile(f fileContent, c string) error {
 	dec, err := base64.StdEncoding.DecodeString(f.Content)
 	if err != nil {
@@ -243,6 +262,7 @@ func SaveFile(f fileContent, c string) error {
 	return nil
 }
 
+// cmdYesNo prompts user for a Yes/No, returns true if Yes
 func cmdYesNo() bool {
 	prompt := promptui.Select{
 		Label: "Select [Yes/No]",

@@ -1,14 +1,17 @@
 <template>
-    <stat :header="header" :badge="badge" :prefix="prefix" :suffix="suffix"></stat>
+  <stat
+    :header="header"
+    :badge="badge"
+    :prefix="prefix"
+    :suffix="suffix"
+  ></stat>
 </template>
     
 <script>
-import Stat from './Stat.vue'
+import Stat from "@/components/Stat.vue";
 export default {
-    components:{Stat},
-  props: [
-    "header","prefix","date","suffix"
-  ],
+  components: { Stat },
+  props: ["header", "prefix", "date", "suffix"],
   data() {
     return {
       interval: null,
@@ -16,7 +19,7 @@ export default {
       hours: 0,
       minutes: 0,
       seconds: 0,
-      badge : "",
+      badge: "",
       intervals: {
         second: 1000,
         minute: 1000 * 60,
@@ -45,7 +48,7 @@ export default {
       this.minutes = Math.floor(diff / this.intervals.minute);
       diff -= this.minutes * this.intervals.minute;
       this.seconds = Math.floor(diff / this.intervals.second);
-      this.badge = `${this.days} days ${this.hours} hours ${this.minutes} minutes`
+      this.badge = `${this.days} days ${this.hours} hours ${this.minutes} minutes`;
     },
   },
 };
