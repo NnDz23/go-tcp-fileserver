@@ -22,31 +22,40 @@ import (
 const (
 	// SERVER_API_PORT port to serve API
 	SERVER_API_PORT = 8081
-	//SERVER_PORT port for fileserver protocol
+	// SERVER_PORT port for fileserver protocol
 	SERVER_PORT = 8021
-	//SERVER_PROTOCOL protocol to use for fileserver
+	// SERVER_PROTOCOL protocol to use for fileserver
 	SERVER_PROTOCOL = "tcp"
 
-	//SUBSCRIBE_REQUEST_PREFIX subscribe command prefix
+	// SUBSCRIBE_REQUEST_PREFIX subscribe request command prefix
 	SUBSCRIBE_REQUEST_PREFIX = "subscribe "
-	SUBSCRIBE_REQUEST_REGEX  = SUBSCRIBE_REQUEST_PREFIX + ".+ {}"
-	SUBSCRIBE_RESPONSE       = "file %s\n"
+	// SUBSCRIBE_REQUEST_PREFIX subscribe request command regex
+	SUBSCRIBE_REQUEST_REGEX = SUBSCRIBE_REQUEST_PREFIX + ".+ {}"
+	// SUBSCRIBE_RESPONSE file response format for subscribed clients
+	SUBSCRIBE_RESPONSE = "file %s\n"
 
+	// SEND_REQUEST_PREFIX send request command prefix
 	SEND_REQUEST_PREFIX = "send "
-	SEND_REQUEST_REGEX  = SEND_REQUEST_PREFIX + ".+ {.+}"
-	SEND_REQUEST        = "%s %s %s\n"
+	// SEND_REQUEST_PREFIX send request command regex
+	SEND_REQUEST_REGEX = SEND_REQUEST_PREFIX + ".+ {.+}"
+	// SEND_REQUEST_PREFIX send request format
+	// used on server-side to send files from admin
+	SEND_REQUEST = "%s %s %s\n"
 )
 
 var (
+	// errUnexistingChannel error for unexisting channels
 	errUnexistingChannel = errors.New("there was an attempt to send a file to an unexisting channel")
 )
 
+// fileContent struct that contains metadata (Name and Extension) associated to the Content
 type fileContent struct {
 	Name      string `json:"name"`
 	Extension string `json:"extension"`
 	Content   string `json:"content"`
 }
 
+// Channel struct that contains Name of the channel, clients connected to the channel, Files (count) sent, Clients (count) connected and CreatedAt time for the channel
 type Channel struct {
 	Name              string              `json:"name"`
 	ClientConnections map[string]net.Conn `json:"-"`
@@ -55,6 +64,7 @@ type Channel struct {
 	CreatedAt         time.Time           `json:"created_at"`
 }
 
+// ServerStats struct that contains Stats for the server Files (count) sent, Clients (count) connected, Channels (count) created and CreatedAt time
 type ServerStats struct {
 	Files     int       `json:"files_sent"`
 	Clients   int       `json:"clients_connected"`
@@ -62,22 +72,25 @@ type ServerStats struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// Server struct that stores channels available on the server, chan for sendRequest and the startedAt time of the server.
 type Server struct {
 	channels    map[string]*Channel
 	sendRequest chan string
-	started_at  time.Time
+	startedAt   time.Time
 }
 
+// NewServer creates a new server instance and starts listening for incoming connections
 func NewServer() *Server {
 	server := &Server{
 		channels:    make(map[string]*Channel),
 		sendRequest: make(chan string),
-		started_at:  time.Now(),
+		startedAt:   time.Now(),
 	}
-	server.Listen()
+	go server.Listen()
 	return server
 }
 
+//NewChannel creates a new channel instance with name and adds the connection of the client that first subscribed to the channel
 func NewChannel(client net.Conn, name string) *Channel {
 	channel := &Channel{
 		Name:              name,
@@ -89,6 +102,7 @@ func NewChannel(client net.Conn, name string) *Channel {
 	return channel
 }
 
+// GetServerStats returns stats from the server
 func (server *Server) GetServerStats() *ServerStats {
 	files := 0
 	clients := 0
@@ -103,12 +117,13 @@ func (server *Server) GetServerStats() *ServerStats {
 		Files:     files,
 		Clients:   clients,
 		Channels:  channels,
-		CreatedAt: server.started_at,
+		CreatedAt: server.startedAt,
 	}
 
 	return serverStats
 }
 
+// SubscribeClient handles client subscribe request, adds client to ClientConnections of the channel if already exists or creates a new channel
 func (server *Server) SubscribeClient(client net.Conn, channel string) {
 	if serverChannel, ok := server.channels[channel]; ok {
 		serverChannel.Clients = serverChannel.Clients + 1
@@ -119,6 +134,7 @@ func (server *Server) SubscribeClient(client net.Conn, channel string) {
 	}
 }
 
+// UnsubscribeClient handles client unsubscribe by deleting client from ClientConnections corresponding to the channel and closes client connection
 func (server *Server) UnsubscribeClient(client net.Conn, channel string) {
 	clientKey := client.RemoteAddr().String()
 	serverChannel := server.channels[channel]
@@ -130,20 +146,19 @@ func (server *Server) UnsubscribeClient(client net.Conn, channel string) {
 	}
 }
 
+// Listen listens on server sendRequest channel for sent files
 func (server *Server) Listen() {
-	go func() {
-		for {
-			request := <-server.sendRequest
-			parsedFileContent, channel, err := server.Parse(request)
+	for {
+		request := <-server.sendRequest
+		parsedFileContent, channel, err := server.Parse(request)
 
-			if err != nil {
-				log.Printf("listen error: %s", err.Error())
-				continue
-			}
-
-			server.Broadcast(channel, parsedFileContent)
+		if err != nil {
+			log.Printf("listen error: %s", err.Error())
+			continue
 		}
-	}()
+
+		server.Broadcast(channel, parsedFileContent)
+	}
 }
 
 // Parse converts request ands returns parsedFileContent and channel
@@ -181,6 +196,7 @@ func (server *Server) Broadcast(channel string, fileContentStr string) {
 	}
 }
 
+// HandleConnection handles client connections for all request types
 func (server *Server) HandleConnection(conn net.Conn) {
 	//Check if its subscribe or send
 	reader := bufio.NewReader(conn)
@@ -213,6 +229,7 @@ func (server *Server) HandleConnection(conn net.Conn) {
 
 }
 
+// WriteJsonResponse helper function to write response for API
 func WriteJsonResponse(w http.ResponseWriter, status int, output []byte) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -224,6 +241,7 @@ func WriteJsonResponse(w http.ResponseWriter, status int, output []byte) error {
 	return nil
 }
 
+// ServeAPI serves API for the server admin
 func (server *Server) ServeAPI() {
 	log.Println("API listening on port", SERVER_API_PORT)
 
@@ -282,7 +300,10 @@ func (server *Server) ServeAPI() {
 		}
 
 		var b body
-		var res jsonResponse
+		res := jsonResponse{
+			Error:   false,
+			Message: "",
+		}
 
 		dec := json.NewDecoder(r.Body)
 		err := dec.Decode(&b)

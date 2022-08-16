@@ -39,7 +39,7 @@ const (
 var wg sync.WaitGroup
 var allowOverwrite bool
 
-// fileContent stuct that contains metadata (Name and Extension) associated to the Content
+// fileContent struct that contains metadata (Name and Extension) associated to the Content
 type fileContent struct {
 	Name      string `json:"name"`
 	Extension string `json:"extension"`
