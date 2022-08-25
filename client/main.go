@@ -217,7 +217,7 @@ func GetFile(file *string) (*fileContent, error) {
 
 // SaveFile saves received file to the files directory
 func SaveFile(f fileContent, c string) error {
-	dec, err := base64.StdEncoding.DecodeString(f.Content)
+	/*dec, err := base64.StdEncoding.DecodeString(f.Content)
 	if err != nil {
 		log.Println(err)
 	}
@@ -257,6 +257,57 @@ func SaveFile(f fileContent, c string) error {
 		}
 	} else {
 		log.Println(filePath, "already exists, overwriting not allowed")
+	}
+
+	return nil
+	*/
+
+	dec, err := base64.StdEncoding.DecodeString(f.Content)
+	if err != nil {
+		return err
+	}
+	//create channel directory if it does not exists
+	path := FILES_DIR + c + "/"
+	var pathExists bool
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		pathExists = false
+	} else if err != nil {
+		pathExists = true
+	} else {
+		return err
+	}
+
+	if !pathExists {
+		err = os.Mkdir(path, os.ModePerm)
+	}
+	if err != nil {
+		return err
+	}
+
+	filePath := path + f.Name + f.Extension
+	overwriteRequired := false
+	// if error is returned then there's no existing file with that name
+	// this is without checking if we have required permissions
+	if _, err := os.Stat(filePath); err == nil {
+		overwriteRequired = true
+	}
+
+	if overwriteRequired && !allowOverwrite {
+		return errors.New("overwrite required, but not allowed")
+	}
+
+	//create file
+	file, err := os.Create(path + f.Name + f.Extension)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	//write file
+	if _, err := file.Write(dec); err != nil {
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		return err
 	}
 
 	return nil
