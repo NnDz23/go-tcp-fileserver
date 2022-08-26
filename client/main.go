@@ -20,7 +20,9 @@ import (
 )
 
 const (
-	SERVER_PORT     = ":8021"
+	// SERVER_PORT port for fileserver protocol
+	SERVER_PORT = ":8021"
+	// SERVER_PROTOCOL protocol to use for fileserver
 	SERVER_PROTOCOL = "tcp"
 
 	//request format
@@ -34,6 +36,11 @@ const (
 	RESPONSE_REGEX = RESPONSE_PREFIX + "{.+}\n"
 	// FILES_DIR directory used to store incoming files
 	FILES_DIR = "./files/"
+)
+
+var (
+	// errUnexistingChannel error for unexisting channels
+	errOverwriteNotAllowed = errors.New("overwrite required, but not allowed")
 )
 
 var wg sync.WaitGroup
@@ -217,51 +224,6 @@ func GetFile(file *string) (*fileContent, error) {
 
 // SaveFile saves received file to the files directory
 func SaveFile(f fileContent, c string) error {
-	/*dec, err := base64.StdEncoding.DecodeString(f.Content)
-	if err != nil {
-		log.Println(err)
-	}
-	//create channel directory if it does not exists
-	path := FILES_DIR + c + "/"
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		err := os.Mkdir(path, os.ModePerm)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-
-	filePath := path + f.Name + f.Extension
-	var writeFile bool
-	if _, err := os.Stat(filePath); err == nil {
-		if allowOverwrite {
-			log.Println("overwriting", filePath)
-		}
-		writeFile = allowOverwrite
-	} else {
-		writeFile = true
-	}
-
-	if writeFile {
-		//create file
-		file, err := os.Create(path + f.Name + f.Extension)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		//write file
-		if _, err := file.Write(dec); err != nil {
-			return err
-		}
-		if err := file.Sync(); err != nil {
-			return err
-		}
-	} else {
-		log.Println(filePath, "already exists, overwriting not allowed")
-	}
-
-	return nil
-	*/
-
 	dec, err := base64.StdEncoding.DecodeString(f.Content)
 	if err != nil {
 		return err
@@ -293,7 +255,7 @@ func SaveFile(f fileContent, c string) error {
 	}
 
 	if overwriteRequired && !allowOverwrite {
-		return errors.New("overwrite required, but not allowed")
+		return errOverwriteNotAllowed
 	}
 
 	//create file
